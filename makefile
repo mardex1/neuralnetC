@@ -1,6 +1,12 @@
+CC=gcc
 
-
-all: basicnn
+all: basicnn run
 
 basicnn: basicnn.c
-	gcc -g -Wall -Wextra basicnn.c linalg.c -o basicnn -lm
+	$(CC) -g -Wall -Wextra basicnn.c linalg.c nn.c -o basicnn -lm
+
+run: 
+	./basicnn
+
+rm:
+	rm basicnn
