@@ -62,9 +62,9 @@ int main () {
     v_weight Y = create_v_weight(y_true, N_ROWS);
 
     int* neurons_per_layer = (int*)malloc(sizeof(int)*3);
-    neurons_per_layer[0] = 8;
-    neurons_per_layer[1] = 4;
-    neurons_per_layer[2] = 2;
+    neurons_per_layer[0] = 16;
+    neurons_per_layer[1] = 8;
+    neurons_per_layer[2] = 1;
 
     model m = instanciate_model(2, neurons_per_layer);
     m.input_matrices[0] = x;
@@ -77,7 +77,7 @@ int main () {
     backprop(a, x, Y, m);
 
     free_model(m);
-    free_matrix(X_ptr, N_ROWS);
+    free_matrix(x.matrix, x.row);
     free(y_true);
 
     return 0;
