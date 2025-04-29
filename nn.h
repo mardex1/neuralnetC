@@ -2,8 +2,8 @@
 #define __NN_H_
 
 #define STEPS 100000
-#define N_FEATURES 2
-#define N_ROWS 4
+#define N_FEATURES 8
+#define N_ROWS 32
 #define N_NEURONS 1
 #define LEARNING_RATE 0.1
 
@@ -21,6 +21,7 @@ typedef struct model {
     int n_layers;
     int* neurons_per_layer;
     m_weight* weight_matrices;
+    m_weight* input_matrices;
     v_weight* bias_vectors;
 }model;
 
@@ -40,10 +41,16 @@ float** update_param(float** m, float** dm, int r, int c);
 
 float* update_param_b(float* b, float** db, int r, int c);
 
-float** forward(float** X, float** W, float* b);
+m_weight forward(m_weight X, model m);
 
-int backprop(float** A, float** X, float* y_true, float** w1, float* b1);
+void backprop(m_weight a, m_weight x, v_weight Y, model m);
 
 model instanciate_model(int n_layers, int* neurons_per_layer);
+
+m_weight create_m_weight(float** m, int rows, int cols); 
+
+v_weight create_v_weight(float* v, int len);
+
+void free_model(model m);
 
 #endif

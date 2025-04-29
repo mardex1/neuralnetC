@@ -11,7 +11,7 @@ model instanciate_model(int n_layers, int* neurons_per_layer) {
 
     m.weight_matrices = (m_weight*)malloc(sizeof(m_weight)*n_layers);
     for(int i = 0; i < n_layers; i++) {
-        m.weight_matrices[i].matrix = (float**)malloc(sizeof(float)*neurons_per_layer[i]);
+        m.weight_matrices[i].matrix = (float**)malloc(sizeof(float*)*neurons_per_layer[i]);
         m.weight_matrices[i].row = neurons_per_layer[i];
         for(int j = 0; j < neurons_per_layer[i]; j++) {
             m.weight_matrices[i].matrix[j] = (float*)malloc(sizeof(float)*neurons_per_layer[i+1]);
@@ -26,12 +26,23 @@ model instanciate_model(int n_layers, int* neurons_per_layer) {
     for(int i = 0; i < n_layers; i++) {
         m.bias_vectors[i].vector = (float*)malloc(sizeof(float)*neurons_per_layer[i+1]);
         m.bias_vectors[i].length = neurons_per_layer[i+1];
-        for(int j = 0; j < neurons_per_layer[i]; j++) {
+        for(int j = 0; j < neurons_per_layer[i+1]; j++) {
             m.bias_vectors[i].vector[j] = 1;
         }
     }
 
+    m.input_matrices = (m_weight*)malloc(sizeof(m_weight)*n_layers);
+
     return m;
+}
+
+void free_model(model m) {
+    for(int i = 0; i < m.n_layers; i++) {
+        // free(m.bias_vectors[i].vector);
+        free_matrix(m.weight_matrices[i].matrix, m.weight_matrices[i].row);
+    }
+    free(m.weight_matrices);
+    free(m.bias_vectors);
 }
 
 float rand_float() {
@@ -108,36 +119,102 @@ float* update_param_b(float* b, float** db, int r, int c) {
     return b;
 }
 
-float** forward(float** X, float** W, float* b) {
-    // XW = XW
-    float** XW = m_mul(X, W, N_ROWS, N_FEATURES, N_NEURONS);
+m_weight linear(m_weight X, m_weight W, v_weight B) {
+    float** XW = m_mul(X.matrix, W.matrix, X.row, W.row, W.col);
     // z = xw1 + b - 4x1
-    float** Z = m_add_bc(XW, b, N_ROWS, N_FEATURES);
-    // a = sigmoid(Z) - 4x1
-    float** A = m_sigmoid(Z, N_ROWS, N_NEURONS);
+    m_weight xw = create_m_weight(XW, X.row, W.col);
 
-    free_matrix(Z, N_ROWS);
+    float** Z = m_add_bc(xw.matrix, B.vector, xw.row, xw.col);
 
-    return A;
+    m_weight z = create_m_weight(Z, xw.row, xw.col);
 
+    return z;
 }
 
-int backprop(float** A, float** X, float* y_true, float** w1, float* b1) {
+m_weight forward(m_weight X, model m) {
+
+    for(int i = 0; i < m.n_layers; i++) {
+        m.input_matrices[i] = X;
+        X = linear(X, m.weight_matrices[i], m.bias_vectors[i]);
+        // (32, 4) = (32, 8)*(8, 4) + (4,) 
+        // (32,2) = (32, 4)*(4, 2) + (4,)
+    }
+
+    float** A = m_sigmoid(X.matrix, X.row, X.col);
+
+    m_weight a = create_m_weight(A, X.row, X.col);
+
+    return a;
+}
+
+m_weight create_m_weight(float** m, int rows, int cols) {
+    m_weight x;
+
+    x.matrix = m;
+    x.row = rows;
+    x.col = cols;
+
+    return x;
+}
+
+v_weight create_v_weight(float* v, int len) {
+    v_weight x;
+
+    x.vector = v;
+    x.length = len;
+
+    return x;
+}
+
+void backprop(m_weight a, m_weight x, v_weight Y, model m) {
     // (a - y_true) - 4x1
-    float** da = mse_derivative(A, y_true, N_ROWS, N_NEURONS);
+    // (32, 2)
+    float** DA = mse_derivative(a.matrix, Y.vector, a.row, a.col);
+    m_weight da = create_m_weight(DA, a.row, a.col);
+    // dc/dz = dc/da*da/dz
+    // da/dz
+    float** DZ_TMP = m_sigmoid_derivative(da.matrix, da.row, da.col);
+    m_weight dz_tmp = create_m_weight(DZ_TMP, da.row, da.col);
 
-    float** dz_tmp = m_sigmoid_derivative(da, N_ROWS, N_NEURONS);
-    float** dz = m_mul_elem_wise(da, dz_tmp, N_ROWS, N_NEURONS);
+    // dc/da*da/dz
+    float** DZ = m_mul_elem_wise(da.matrix, dz_tmp.matrix, da.row, da.col);
+    m_weight dz = create_m_weight(DZ, da.row, da.col);
 
-    float** X_transposed = transpose(X, N_ROWS, N_FEATURES);
-    float** dw = m_mul(X_transposed, dz, N_FEATURES, N_ROWS, N_NEURONS);
+    m_weight z;
 
-    w1 = update_param(w1, dw, N_FEATURES, N_NEURONS);
-    b1 = update_param_b(b1, dz, N_ROWS, N_NEURONS);
+    for(int i = m.n_layers-1; i >= 0; i--) {
+        if (i == 0) {
+            z = x;
+        }else{
+            z = m.input_matrices[i];
+        }
 
-    free_matrix(da, N_ROWS);
-    free_matrix(dz_tmp, N_ROWS);
-    free_matrix(X_transposed, N_FEATURES);
+        float** Z_transposed = transpose(z.matrix, z.row, z.col);
+        m_weight z_transposed = create_m_weight(Z_transposed, z.col, z.row);
 
-    return 1;
+        float** DW = m_mul(z_transposed.matrix, dz.matrix, z_transposed.row, dz.row, dz.col);
+        m_weight dw = create_m_weight(DW, z_transposed.row, dz.col);
+
+        m_weight w = m.weight_matrices[i];
+        v_weight b = m.bias_vectors[i];
+        m.weight_matrices[i].matrix = update_param(w.matrix, dw.matrix, dw.row, dw.col);
+        m.bias_vectors[i].vector = update_param_b(b.vector, dz.matrix, dz.row, dz.col);
+
+        if(i > 0) {
+            float** W_transposed = transpose(w.matrix, w.row, w.col);
+            m_weight w_transposed = create_m_weight(W_transposed, w.col, w.row);
+
+            float** DZ = m_mul(dz.matrix, w_transposed.matrix, dz.row, w_transposed.row, w_transposed.col);
+            dz = create_m_weight(DZ, dz.row, w_transposed.col);
+
+            free_matrix(w_transposed.matrix, w_transposed.row);
+        }
+        
+        free_matrix(z_transposed.matrix, z_transposed.row);
+        free_matrix(dw.matrix, dw.row);
+
+    }
+    free_matrix(dz.matrix, dz.row);
+    free_matrix(da.matrix, da.row);
+    
 }
