@@ -1,12 +1,14 @@
 CC=gcc
 
-all: basicnn run
+SOURCES = ./src/*.c
 
-basicnn: basicnn.c
-	$(CC) -g -Wall -Wextra basicnn.c linalg.c nn.c -o basicnn -lm
+all: main run clean
+
+main:
+	$(CC) -g -Wall -Wextra -L../lib -I./include $(SOURCES) -o main -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
 
 run: 
-	./basicnn
+	./main
 
-rm:
-	rm basicnn
+clean:
+	rm main

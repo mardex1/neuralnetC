@@ -36,8 +36,8 @@ model instanciate_model(int n_layers, int* neurons_per_layer) {
     return m;
 }
 
-void select_random_samples(m_weight x, v_weight y, float** X_batch, float* Y_batch) {
-    for(int i = 0; i < BATCH_SIZE; i++) {
+void select_random_samples(m_weight x, v_weight y, float** X_batch, float* Y_batch, int n_samples) {
+    for(int i = 0; i < n_samples; i++) {
         int r = rand() % x.row;
 
         X_batch[i] = x.matrix[r];
@@ -50,17 +50,44 @@ float rand_float() {
     return 2 * r - 1;
 }
 
-float** m_sigmoid(float** m, int r, int c) {
-
+float** create_onehot(float* y, int r, int classes) {
     float** tmp = (float**)malloc(sizeof(float*)*r);
     for(int i = 0; i < r; i++) {
-        tmp[i] = (float*)malloc(sizeof(float)*c);
+        tmp[i] = (float*)malloc(sizeof(float)*classes);
+        int class = (int)y[i];
+        for(int j = 0; j < classes; j++) {
+            if(j != class) {
+                tmp[i][j] = 0;
+            }else{
+                tmp[i][j] = 1;
+            }
+        }
+    }
+    return tmp;
+}
+
+float** m_softmax(float** m, int r, int c) {
+    // float** m_transposed = transpose(m, r, c);
+    for(int i = 0; i < r; i++) {
+        float sum = 0;
         for(int j = 0; j < c; j++) {
-            tmp[i][j] = 1 / (1 + expf(-m[i][j]));
+            sum += expf(m[i][j]);
+        }
+        for(int j = 0; j < c; j++) {
+            m[i][j] = expf(m[i][j]) / sum;
         }
     }
 
-    return tmp;
+    return m;   
+}
+
+float** m_sigmoid(float** m, int r, int c) {
+    for(int i = 0; i < r; i++) {
+        for(int j = 0; j < c; j++) {
+            m[i][j] = 1 / (1 + expf(-m[i][j]));
+        }
+    }
+    return m;
 }
 
 float** m_sigmoid_derivative(float** m, int r, int c) {
@@ -108,7 +135,19 @@ float** m_relu_derivative(float** m, int r, int c) {
     return tmp;
 }
 
-float compute_cost_f(float* y_true, float **m, int r, int c) {
+float cross_entropy_loss(float** y_one_hot, m_weight a) {
+    float total = 0;
+    for(int i = 0; i < a.row; i++) {
+        float class_sum = 0;
+        for(int j = 0; j < N_CLASSES; j++) {
+            class_sum += -y_one_hot[i][j]*log(a.matrix[i][j]);
+        }
+        total += class_sum;
+    }
+    return total;
+}
+
+float compute_cost_f(float* y_true, float** m, int r, int c) {
     float sum = 0.0;
     for(int i = 0; i < r; i++) {
         for(int j = 0; j < c; j++) {
@@ -142,7 +181,7 @@ float** update_param(float** m, float** dm, int r, int c) {
 float* update_param_b(float* b, float** db, int r, int c) {
     for(int i = 0; i < r; i++) {
         for(int j = 0; j < c; j++) {
-            b[i] = b[i] - (LEARNING_RATE*db[j][i]);
+            b[j] = b[j] - (LEARNING_RATE*db[i][j]);
         }
     }
     return b;
@@ -162,14 +201,15 @@ m_weight linear(m_weight X, m_weight W, v_weight B) {
 
 m_weight forward(m_weight X, model m) {
     for(int i = 0; i < m.n_layers; i++) {
-        
-        
         m.input_matrices[i] = X;
         X = linear(X, m.weight_matrices[i], m.bias_vectors[i]);
-        // (32, 4) = (32, 8)*(8, 4) + (4,) 
-        // (32,2) = (32, 4)*(4, 2) + (4,)
-        X.matrix = m_sigmoid(X.matrix, X.row, X.col);
-
+        
+        if(i < m.n_layers-1) {
+            X.matrix = m_sigmoid(X.matrix, X.row, X.col);
+        }else {
+            // Last layer
+            X.matrix = m_softmax(X.matrix, X.row, X.col);
+        }
     }
     m_weight a = create_m_weight(X.matrix, X.row, X.col);
 
@@ -195,23 +235,42 @@ v_weight create_v_weight(float* v, int len) {
     return x;
 }
 
-void backprop(m_weight a, m_weight x, v_weight Y, model m) {
+void backprop(m_weight a, m_weight x, m_weight y_hot, model m) {
     // (a - y_true) - 4x1
     // (32, 2)
-    float** DA = mse_derivative(a.matrix, Y.vector, a.row, a.col);
-    m_weight da = create_m_weight(DA, a.row, a.col);
+    // float** DA = mse_derivative(a.matrix, Y.vector, a.row, a.col);
+    // m_weight da = create_m_weight(DA, a.row, a.col);
     // dc/dz = dc/da*da/dz
     // da/dz
+
+    float** DZ = m_sub(a.matrix, y_hot.matrix, a.row, a.col);
+    m_weight dz = create_m_weight(DZ, a.row, a.col);
 
     m_weight z;
 
     for(int i = m.n_layers-1; i >= 0; i--) {
-        float** DZ_TMP = m_sigmoid_derivative(da.matrix, da.row, da.col);
-        m_weight dz_tmp = create_m_weight(DZ_TMP, da.row, da.col);
+        // float** DZ_TMP = m_sigmoid_derivative(da.matrix, da.row, da.col);
+        // m_weight dz_tmp = create_m_weight(DZ_TMP, da.row, da.col);
 
-        // dc/da*da/dz
-        float** DZ = m_mul_elem_wise(da.matrix, dz_tmp.matrix, da.row, da.col);
-        m_weight dz = create_m_weight(DZ, da.row, da.col);
+        // // dc/da*da/dz
+        // float** DZ = m_mul_elem_wise(da.matrix, dz_tmp.matrix, da.row, da.col);
+        // m_weight dz = create_m_weight(DZ, da.row, da.col);
+
+        if(i != m.n_layers-1) {
+            float** DZ_TMP = m_sigmoid_derivative(dz.matrix, dz.row, dz.col);
+            m_weight dz_tmp = create_m_weight(DZ_TMP, dz.row, dz.col);
+
+            // dc/da*da/dz
+            float** DZ = m_mul_elem_wise(dz.matrix, dz_tmp.matrix, dz.row, dz.col);
+
+            int row = dz.row;
+            int col = dz.col;
+
+            free_matrix(dz.matrix, dz.row);
+
+            dz = create_m_weight(DZ, row, col);
+
+        }
 
         if (i == 0) {
             z = x;
@@ -226,7 +285,7 @@ void backprop(m_weight a, m_weight x, v_weight Y, model m) {
         m_weight dw = create_m_weight(DW, z_transposed.row, dz.col);
 
         m_weight w = m.weight_matrices[i];
-        v_weight b = m.bias_vectors[i];
+        v_weight b = m.bias_vectors[i]; 
         m.weight_matrices[i].matrix = update_param(w.matrix, dw.matrix, dw.row, dw.col);
         m.bias_vectors[i].vector = update_param_b(b.vector, dz.matrix, dz.row, dz.col);
 
@@ -234,18 +293,22 @@ void backprop(m_weight a, m_weight x, v_weight Y, model m) {
             float** W_transposed = transpose(w.matrix, w.row, w.col);
             m_weight w_transposed = create_m_weight(W_transposed, w.col, w.row);
 
-            da.matrix = m_mul(dz.matrix, w_transposed.matrix, dz.row, w_transposed.row, w_transposed.col);
+            float** dz_tmp = m_mul(dz.matrix, w_transposed.matrix, dz.row, w_transposed.row, w_transposed.col);
+
+            int row = dz.row;
+            int col = w_transposed.col;
+
+            free_matrix(dz.matrix, dz.row);
+
+            dz = create_m_weight(dz_tmp, row, col);
 
             free_matrix(w_transposed.matrix, w_transposed.row);
         }
         
         free_matrix(z_transposed.matrix, z_transposed.row);
         free_matrix(dw.matrix, dw.row);
-        free_matrix(dz.matrix, dz.row);
 
     }
-    
-    free_matrix(da.matrix, da.row);
     
 }
 

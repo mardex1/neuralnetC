@@ -1,8 +1,10 @@
 #include "dataset.h"
+#include <stdio.h>
+#include "nn.h"
 
 void read_csv_file(char* path, float** X, float* Y) {
     FILE* fp;
-    char s[2048];
+    char s[4096];
     int line = 0;
 
     fp = fopen(path, "r");
@@ -11,11 +13,11 @@ void read_csv_file(char* path, float** X, float* Y) {
         char* token = strtok(s, ",");
         int column = 0;
         while (token != NULL) {
-
+            // printf("column: %d\n", column);
             if (column == 0) {
-                Y[line] = atoi(token);
+                Y[line] = atof(token);
             }else{
-                X[line][column] = atoi(token);
+                X[line][column-1] = atof(token);
             }
 
             column++;
@@ -23,6 +25,7 @@ void read_csv_file(char* path, float** X, float* Y) {
         }
         line++;
     }
+    printf("line: %d\n", line);
     fclose(fp);
 }
 

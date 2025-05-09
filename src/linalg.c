@@ -12,6 +12,18 @@ float** m_add_bc(float** m, float* b, int r, int c) {
     return m;
 }
 
+float** m_sub(float** a, float** b, int n, int m) {
+    float** res = (float**)malloc(sizeof(float*)*n);
+    for(int i = 0; i < n; i++) {
+        res[i] = (float*)malloc(sizeof(float)*m);
+        for(int j = 0; j < m; j++) {
+            res[i][j] = a[i][j] - b[i][j];
+        }
+    }
+
+    return res;
+}
+
 float** m_add(float** a, float** b, int n, int m) {
     float** res = (float**)malloc(sizeof(float*)*n);
     for(int i = 0; i < n; i++) {
@@ -22,6 +34,14 @@ float** m_add(float** a, float** b, int n, int m) {
     }
 
     return res;
+}
+
+void m_divide_s(float** a, float s, int n, int m) {
+    for(int i = 0; i < n; i++) {
+        for(int j = 0; j < m; j++) {
+            a[i][j] = a[i][j] / s;
+        }
+    }
 }
 
 float** m_mul_s(float** a, float s, int n, int m) {
@@ -102,7 +122,7 @@ float** transpose(float** a, int n, int m) {
 void print_matrix(float** m, int r, int c) {
     for(int i = 0; i < r; i++) {
         for(int j = 0; j < c; j++) {
-            printf("%f\t", m[i][j]);
+            printf("%f ", m[i][j]);
         }printf("\n");
     }
     printf("\n\n");
@@ -110,7 +130,7 @@ void print_matrix(float** m, int r, int c) {
 
 void print_vector(float* v, int l) {
     for(int i = 0; i < l; i++) {
-        printf("%f\t", v[i]);
+        printf("%f ", v[i]);
     }printf("\n\n");
 }
 

@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "nn.h": "c",
+        "time.h": "c",
+        "cmath": "c"
+    }
+}
